@@ -11,7 +11,7 @@ int main(void)
 	DDRB |= (1<<DDB4);
 	DDRD &= ~(1<<DDD7);
 
-	int leds[] = {(1<<PB1), (1<<PB2), (1<<PB3);, (1<<PB4)}; // list of each code operation needed to turn LED ON
+	int leds[] = {(1<<PB1), (1<<PB2), (1<<PB3);, (1<<PB4)}; // depending on what number we are at: it will plug in the correct code to turn on LED
 	int led_on = 0; //set which LED is on first
 	PORTB = 0;
 
@@ -24,7 +24,7 @@ int main(void)
 			{
 				PORTB = 0;
 				PORTB |= leds[led_on];
-				led_on = (led_on + 1) % 4; //change value of INT so they loop through as button pressde
+				led_on = (led_on + 1) % 4; //change value of INT so they switch to next LED in series
 				while (!(PIND & (1<<PIND7)));
 			}
 		}
