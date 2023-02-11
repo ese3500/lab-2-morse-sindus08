@@ -1,0 +1,112 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+
+#include "uart.h"
+#define F_CPU 16000000UL
+#define BAUD_RATE 9600
+#define BAUD_PRESCALER (((F_CPU / (BAUD_RATE * 16UL))) - 1)
+#define TICKS (F_CPU / 256)
+#define TICKS_DOT_MIN (30 * TICKS)/1000
+#define TICKS_DOT_MAX (200 * TICKS)/1000
+#define TICKS_DASH_MIN (200 * TICKS)/1000
+#define TICKS_DASH_MAX (400 * TICKS)/1000
+#define TICKS_SPACE (400 * TICKS)/1000
+volatile uint16_t Start = 0;
+volatile uint16_t End = 0;
+volatile uint16_t capture_time = 0;
+volatile uint16_t last_capture_time = 0;
+
+/*--------------------Variables---------------------------*/
+char String[25];
+
+/*-----------------------------------------------------------*/
+void Initialize()
+{
+	cli(); //disables global interrupt
+	DDRB &= ~(1<<DDB0); //set as input
+	DDRB |= (1<<DDB5); //LED as output
+	TIMSK1 |= (1<<ICIE1); //enable input capture event
+	TIMSK1 |= (1<<TOIE1); //overflow interupt enabled
+	TCCR1B |= (1<<ICES1); //LOOKING for rising edge
+	TCCR1B &= ~(1<<CS10); //1024 prescaler on timer
+	TCCR1B &= ~(1<<CS11);
+	TCCR1B |= (1<<CS12);
+	TIFR1 |= (1<<ICF1); //clear input capture flag
+	sei(); // Enable Global Interrupts
+}
+
+ISR(TIMER1_CAPT_vect) //capture event
+{
+	if (TCCR1B & (1<<ICES1)) //if we are witnessing a rising edge
+	{
+		Start = ICR1;
+		TIFR1 |= (1<<ICF1); //clear input capture flag
+		TCCR1B &= ~(1<<ICES1); // look for falling edge
+		
+	}
+	else
+	{
+		End = ICR1;
+		TIFR1 |= (1<<ICF1); //clear input capture flag
+		TCCR1B |= (1<<ICES1); // look for rising edge
+		
+
+	}
+	if (End > Start)
+	{	capture_time = End- Start;
+	}
+	else
+	{	capture_time= (65535 - Start) + End;
+		
+	}
+	
+}
+
+int main(void)
+{	UART_init(BAUD_PRESCALER);
+	Initialize();
+	
+	while (1)
+	{
+		//sprintf(String,"%u \n",capture_time);
+		//UART_putstring(String);
+		//sprintf(String,"Hello world! \n");
+		//UART_putstring(String);
+		if(capture_time >= TICKS_DOT_MIN && capture_time <= TICKS_DOT_MAX)
+		{
+			// Dot
+			PORTB ^= (1<<PORTB5);
+			sprintf(String, ". \n");
+			UART_putstring(String);
+			last_capture_time = capture_time;
+			capture_time = 0;
+			
+		}
+		else if(capture_time >= TICKS_DASH_MIN && capture_time <= TICKS_DASH_MAX)
+		{
+			// Dash
+			PORTB ^= (1<<PORTB5);
+			sprintf(String, "- \n");
+			UART_putstring(String);
+			last_capture_time = capture_time;
+			capture_time = 0;
+		}
+		
+		else if(((TCNT1 > End) && (TCNT1 > End + TICKS_SPACE)) || ((TCNT1 < End) && (400 < TCNT1 + 65535-End))) //if it's been more than 400 ms since the last end and overflow is taking into account
+		{
+			if ((last_capture_time >= TICKS_DOT_MIN && last_capture_time <= TICKS_DOT_MAX) || (last_capture_time >= TICKS_DASH_MIN && last_capture_time <= TICKS_DASH_MAX)) // if last statemetn was a dot or dash
+			{sprintf(String, "Space \n");
+			 UART_putstring(String);
+			 last_capture_time=0;
+			}
+			else
+			{
+			}
+		}
+	}
+
+	return 0;
+}
